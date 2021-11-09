@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"os"
+	"os/exec"
 	"text/template"
 
 	"go.uber.org/zap"
@@ -20,10 +21,10 @@ var appname *string
 var appdir string
 var cmddir string
 
-type DockerInfo struct {
-	Appdir     string
-	Entrypoint string
-	Expose     string
+type templateInfo struct {
+	Appdir  string
+	Appname string
+	Expose  string
 }
 
 func main() {
@@ -39,13 +40,14 @@ func main() {
 	appdir = goPath + "/" + *appname
 	cmddir = appdir + "/cmd"
 
-	dockerInfo := DockerInfo{
-		Appdir:     appdir,
-		Entrypoint: *appname,
-		Expose:     *expose,
+	templateInfo := templateInfo{
+		Appdir:  appdir,
+		Appname: *appname,
+		Expose:  *expose,
 	}
 	setupStrcuture()
-	generateDockerfile(dockerInfo)
+	generateGoFiles(templateInfo)
+	generateDockerfile(templateInfo)
 
 }
 
@@ -68,9 +70,40 @@ func setupStrcuture() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Info("Generated main.go at ", cmddir)
 }
-func generateDockerfile(dockerInfo DockerInfo) {
+func generateGoFiles(templateInfo templateInfo) {
+	t, err := template.ParseFiles("template/main.go")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	f, err := os.Create(cmddir + "/main.go")
+	if err != nil {
+		log.Infof("Error writing main.go %v", err.Error())
+		return
+	}
+	t.Execute(f, templateInfo)
+
+	cmd := exec.Command("go", "mod", "init", *appname)
+	cmd.Dir = *&appdir
+
+	err = cmd.Run()
+	if err != nil {
+		log.Infof("Error initializing go module %v", err.Error())
+		return
+	}
+
+	cmd = exec.Command("go", "mod", "tidy")
+	cmd.Dir = *&appdir
+
+	err = cmd.Run()
+	if err != nil {
+		log.Infof("Error tidying go module %v", err.Error())
+		return
+	}
+
+}
+func generateDockerfile(templateInfo templateInfo) {
 	t, err := template.ParseFiles("template/Dockerfile")
 	if err != nil {
 		log.Fatal(err)
@@ -84,8 +117,8 @@ func generateDockerfile(dockerInfo DockerInfo) {
 	}
 	defer f.Close()
 
-	t.Execute(f, dockerInfo)
-	var command = "docker build -t " + dockerInfo.Entrypoint + "."
+	t.Execute(f, templateInfo)
+	var command = "docker build -t " + templateInfo.Appname + "."
 	log.Infow("Dockerfile generated, you can build the image with:",
 		"command", command)
 }
