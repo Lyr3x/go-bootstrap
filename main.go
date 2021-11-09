@@ -2,39 +2,23 @@ package main
 
 import (
 	"flag"
-	"log"
 	"os"
-	"path"
-	"path/filepath"
-	"strings"
 	"text/template"
 
 	"go.uber.org/zap"
 )
 
-const (
-	buildTemplate = `# syntax=docker/dockerfile:1
+var logger *zap.Logger
+var log *zap.SugaredLogger
 
-	FROM golang:1.16-alpine
-	
-	WORKDIR {{.Appdir}}
-	
-	COPY go.mod ./
-	COPY go.sum ./
-	RUN go mod download
-	
-	COPY *.go ./
-	
-	RUN go build -o {{.Entrypoint}}
-	
-	EXPOSE {{.Expose}}
-	
-	ENTRYPOINT ["{{.Entrypoint}}"]
-`
-)
+func InitLogger() {
+	logger, _ = zap.NewProduction()
+	log = logger.Sugar()
+}
 
-var appPath *string
-var appName *string
+var appname *string
+var appdir string
+var cmddir string
 
 type DockerInfo struct {
 	Appdir     string
@@ -44,55 +28,64 @@ type DockerInfo struct {
 
 func main() {
 
+	InitLogger()
+	defer log.Sync()
 	expose := flag.String("expose", "8080", "Port to expose in docker")
-	appPath = flag.String("apppath", "", "Path to the application")
-	appName = flag.String("name", "", "Name of the application")
+	appname = flag.String("appname", "hello-world", "Name of the application")
 
 	flag.Parse()
 
 	goPath := os.Getenv("GOPATH")
-	dir, err := filepath.Abs(".")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	appdir := strings.Replace(dir, goPath, "", 1)
-
-	_, entrypoint := path.Split(appdir)
+	appdir = goPath + "/" + *appname
+	cmddir = appdir + "/cmd"
 
 	dockerInfo := DockerInfo{
 		Appdir:     appdir,
-		Entrypoint: entrypoint,
+		Entrypoint: *appname,
 		Expose:     *expose,
 	}
-
+	setupStrcuture()
 	generateDockerfile(dockerInfo)
 
 }
-func setupStrcuture() {
-	logger, _ := zap.NewProduction()
-	defer logger.Sync()
-	sugar := logger.Sugar()
-	sugar.Infow("Setting up structure")
 
-	os.Mkdir(*appPath+"./cmd", 0755)
-	os.Create(*appPath + "./cmd/main.go")
+func setupStrcuture() {
+
+	log.Info("Setting up structure.")
+
+	err := os.MkdirAll(appdir, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Info("Created project directory ", appdir)
+	err = os.MkdirAll(cmddir, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Info("Creatd cmd directory ", cmddir)
+
+	os.Create(appdir + "/cmd/" + "main.go")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Info("Generated main.go at ", cmddir)
 }
 func generateDockerfile(dockerInfo DockerInfo) {
-	logger, _ := zap.NewProduction()
-	defer logger.Sync()
-	sugar := logger.Sugar()
-	t := template.Must(template.New("buildTemplate").Parse(buildTemplate))
-
-	f, err := os.Create("Dockerfile")
+	t, err := template.ParseFiles("template/Dockerfile")
 	if err != nil {
-		sugar.Infof("Error wrinting Dockerfile %v", err.Error())
+		log.Fatal(err)
+		return
+	}
+
+	f, err := os.Create(appdir + "/Dockerfile")
+	if err != nil {
+		log.Infof("Error wrinting Dockerfile %v", err.Error())
 		return
 	}
 	defer f.Close()
 
 	t.Execute(f, dockerInfo)
 	var command = "docker build -t " + dockerInfo.Entrypoint + "."
-	sugar.Infow("Dockerfile generated, you can build the image with:",
+	log.Infow("Dockerfile generated, you can build the image with:",
 		"command", command)
 }
