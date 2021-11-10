@@ -3,7 +3,7 @@ module go-bootstrap
 go 1.17
 
 require (
-	github.com/urfave/cli/v2 v2.3.0
+	github.com/urfave/cli v1.22.5
 	go.uber.org/zap v1.19.1
 )
 

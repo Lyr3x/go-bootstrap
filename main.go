@@ -1,12 +1,12 @@
 package main
 
 import (
-	"flag"
 	"os"
 	"os/exec"
 	"strings"
 	"text/template"
 
+	"github.com/urfave/cli"
 	"go.uber.org/zap"
 )
 
@@ -18,11 +18,11 @@ func InitLogger() {
 	log = logger.Sugar()
 }
 
-var appname *string
 var appdir string
 var cmddir string
-var example *bool
-var username *string
+var example bool
+var username string
+var appname string
 
 type templateInfo struct {
 	Appdir   string
@@ -35,27 +35,54 @@ func main() {
 
 	InitLogger()
 	defer log.Sync()
-	expose := flag.String("expose", "8080", "Port to expose in docker")
-	appname = flag.String("appname", "hello-world", "Name of the application")
-	example = flag.Bool("example", false, "Generate rich example project")
-	username = flag.String("username", "", "Docker repository username")
+	app := cli.NewApp()
+	app.Name = "go-bootstrap"
+	app.Usage = "CLI tool to boot strap a fresh go project including build files"
 
-	flag.Parse()
-
-	goPath := os.Getenv("GOPATH")
-	appdir = goPath + "/" + *appname
-	cmddir = appdir + "/cmd"
-
-	templateInfo := templateInfo{
-		Appdir:   appdir,
-		Appname:  *appname,
-		Expose:   *expose,
-		Username: strings.ToLower(*username),
+	app.Flags = []cli.Flag{
+		&cli.StringFlag{
+			Name:        "appname",
+			Value:       "default",
+			Usage:       "app name as string",
+			Required:    true,
+			Destination: &appname,
+		},
+		&cli.StringFlag{
+			Name:        "username",
+			Value:       "user",
+			Usage:       "username as string",
+			Required:    true,
+			Destination: &username,
+		},
+		&cli.BoolFlag{
+			Name:        "example",
+			Usage:       "true: Full example, false: minimal working example ",
+			Required:    false,
+			Destination: &example,
+		},
 	}
-	setupStrcuture()
-	generateGoFiles(templateInfo)
-	generateDockerfile(templateInfo)
-	generateMakefile(templateInfo)
+
+	app.Action = func(c *cli.Context) error {
+		goPath := os.Getenv("GOPATH")
+		appdir = goPath + "/" + appname
+		cmddir = appdir + "/cmd"
+
+		templateInfo := templateInfo{
+			Appdir:   appdir,
+			Appname:  appname,
+			Username: strings.ToLower(username),
+		}
+		setupStrcuture()
+		generateGoFiles(templateInfo)
+		generateDockerfile(templateInfo)
+		generateMakefile(templateInfo)
+		return nil
+	}
+
+	err := app.Run(os.Args)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 }
 
@@ -82,7 +109,7 @@ func setupStrcuture() {
 func generateGoFiles(templateInfo templateInfo) {
 	var t *template.Template
 	var err error
-	if *example == true {
+	if example == true {
 		log.Info("Creating full example main.go")
 		t, err = template.ParseFiles("template/main.go.example")
 		if err != nil {
@@ -103,7 +130,7 @@ func generateGoFiles(templateInfo templateInfo) {
 	}
 	t.Execute(f, templateInfo)
 
-	cmd := exec.Command("go", "mod", "init", *appname)
+	cmd := exec.Command("go", "mod", "init", appname)
 	cmd.Dir = *&appdir
 
 	err = cmd.Run()
