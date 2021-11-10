@@ -8,10 +8,10 @@ COPY go.mod ./
 COPY go.sum ./
 RUN go mod download
 
-COPY *.go ./
+COPY cmd/*.go ./
 
 RUN go build -o {{.Appname}}
 
 EXPOSE {{.Expose}}
 
-ENTRYPOINT ["{{.Appname}}"]
+ENTRYPOINT ["./{{.Appname}}"]

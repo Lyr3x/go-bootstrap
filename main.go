@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"os/exec"
+	"strings"
 	"text/template"
 
 	"go.uber.org/zap"
@@ -21,11 +22,13 @@ var appname *string
 var appdir string
 var cmddir string
 var example *bool
+var username *string
 
 type templateInfo struct {
-	Appdir  string
-	Appname string
-	Expose  string
+	Appdir   string
+	Appname  string
+	Expose   string
+	Username string
 }
 
 func main() {
@@ -35,6 +38,7 @@ func main() {
 	expose := flag.String("expose", "8080", "Port to expose in docker")
 	appname = flag.String("appname", "hello-world", "Name of the application")
 	example = flag.Bool("example", false, "Generate rich example project")
+	username = flag.String("username", "", "Docker repository username")
 
 	flag.Parse()
 
@@ -43,13 +47,15 @@ func main() {
 	cmddir = appdir + "/cmd"
 
 	templateInfo := templateInfo{
-		Appdir:  appdir,
-		Appname: *appname,
-		Expose:  *expose,
+		Appdir:   appdir,
+		Appname:  *appname,
+		Expose:   *expose,
+		Username: strings.ToLower(*username),
 	}
 	setupStrcuture()
 	generateGoFiles(templateInfo)
 	generateDockerfile(templateInfo)
+	generateMakefile(templateInfo)
 
 }
 
@@ -134,4 +140,22 @@ func generateDockerfile(templateInfo templateInfo) {
 	var command = "docker build -t " + templateInfo.Appname + "."
 	log.Infow("Dockerfile generated, you can build the image with:",
 		"command", command)
+}
+
+func generateMakefile(templateInfo templateInfo) {
+	t, err := template.ParseFiles("template/Makefile")
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	f, err := os.Create(appdir + "/Makefile")
+	if err != nil {
+		log.Infof("Error wrinting Makefile %v", err.Error())
+		return
+	}
+	defer f.Close()
+
+	t.Execute(f, templateInfo)
+	log.Info("Makefile generated")
 }
