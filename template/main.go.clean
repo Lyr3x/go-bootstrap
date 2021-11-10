@@ -1,0 +1,50 @@
+/// 2>/dev/null; exec gorun "$0" "$@"
+package main
+
+import (
+	"os"
+
+	"github.com/urfave/cli/v2"
+	"go.uber.org/zap"
+)
+
+var logger *zap.Logger
+var log *zap.SugaredLogger
+
+func InitLogger() {
+	logger, _ = zap.NewProduction()
+	log = logger.Sugar()
+}
+
+var stringToPrint string
+
+func main() {
+	InitLogger()
+	defer log.Sync()
+
+	app := cli.NewApp()
+	app.Name = "{{.Appname}}"
+	app.Usage = "Define what your app does"
+
+	app.Flags = []cli.Flag{
+		&cli.StringFlag{
+			Name:        "hello",
+			Value:       "world",
+			Usage:       "print <value> on stdout",
+			Required:    false,
+			Destination: &stringToPrint,
+		},
+	}
+
+	app.Action = func(c *cli.Context) error {
+		if stringToPrint != "" {
+			log.Infof("Hello %s", stringToPrint)
+		}
+		return nil
+	}
+
+	err := app.Run(os.Args)
+	if err != nil {
+		log.Fatal(err)
+	}
+}

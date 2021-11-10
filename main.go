@@ -20,6 +20,7 @@ func InitLogger() {
 var appname *string
 var appdir string
 var cmddir string
+var example *bool
 
 type templateInfo struct {
 	Appdir  string
@@ -33,6 +34,7 @@ func main() {
 	defer log.Sync()
 	expose := flag.String("expose", "8080", "Port to expose in docker")
 	appname = flag.String("appname", "hello-world", "Name of the application")
+	example = flag.Bool("example", false, "Generate rich example project")
 
 	flag.Parse()
 
@@ -72,11 +74,22 @@ func setupStrcuture() {
 	}
 }
 func generateGoFiles(templateInfo templateInfo) {
-	t, err := template.ParseFiles("template/main.go")
-	if err != nil {
-		log.Fatal(err)
-	}
+	var t *template.Template
+	var err error
+	if *example == true {
+		log.Info("Creating full example main.go")
+		t, err = template.ParseFiles("template/main.go.example")
+		if err != nil {
+			log.Fatal(err)
+		}
 
+	} else {
+		log.Info("Creating simple example main.go")
+		t, err = template.ParseFiles("template/main.go.clean")
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	f, err := os.Create(cmddir + "/main.go")
 	if err != nil {
 		log.Infof("Error writing main.go %v", err.Error())
